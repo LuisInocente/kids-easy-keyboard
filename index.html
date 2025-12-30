@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Noten Player</title>
+
+<style>
+:root{
+  --ink:#111827;
+  --card:#f8fafc;
+  --border:rgba(0,0,0,.10);
+  --accent:#ef4444;
+  --muted:#6b7280;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  padding:16px;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  background:#fff;
+  color:var(--ink);
+}
+.wrap{max-width:1600px;margin:0 auto}
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:14px;
+  box-shadow:0 10px 30px rgba(0,0,0,.07);
+}
+
+/* CONTROLS */
+.controls{
+  display:flex;
+  gap:10px;
+  row-gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+button{
+  height:48px;
+  padding:0 14px;
+  border-radius:14px;
+  border:1px solid var(--border);
+  background:#fff;
+  font-weight:900;
+  font-size:16px;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  line-height:1;
+  color:var(--ink);
+  -webkit-tap-highlight-color:transparent;
+  appearance:none;
+  user-select:none;
+  outline:none;
+  flex:0 0 auto;
+  transition:transform .04s ease, box-shadow .08s ease, filter .08s ease;
+}
+button:hover{ box-shadow:0 4px 12px rgba(0,0,0,.10); }
+button:active{
+  transform:translateY(1px);
+  box-shadow:inset 0 6px 14px rgba(0,0,0,.18);
+}
+button.primary{background:var(--ink);color:#fff;border:none}
+button.primary:active{ box-shadow:inset 0 8px 18px rgba(0,0,0,.35); }
+button.danger{border-color:rgba(239,68,68,.40)}
+button.kbdDown{
+  transform:translateY(1px);
+  box-shadow:inset 0 6px 14px rgba(0,0,0,.18);
+  filter:brightness(.98);
+}
+.small{
+  font-size:14px;
+  color:var(--muted);
+  font-weight:900;
+  white-space:nowrap;
+}
+input[type=range]{width:180px}
+select, input[type=text]{
+  height:48px;
+  padding:0 12px;
+  border-radius:14px;
+  border:1px solid var(--border);
+  font-weight:900;
+  font-size:16px;
+  background:#fff;
+  color:var(--ink);
+}
+#songName{ width:360px; max-width:50vw; }
+
+/* icons */
+.iconBox{
+  width:28px;height:28px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 28px;
+}
+.playIcon{font-size:22px}
+.stopSquare{
+  width:22px;
+  height:22px;
+  background:currentColor;
+  border-radius:5px;
+}
+
+/* second row */
+.rowBreak{ flex-basis:100%; height:0; }
+#playlist{ min-width:340px; }
+
+/* STAGE (hoogte wordt via JS gezet) */
+.stage{
+  margin-top:12px;
+  border-radius:16px;
+  background:#fff;
+  border:1px solid rgba(0,0,0,.06);
+  padding:10px;
+
+  overflow:hidden;           /* default: geen scroll bij 8 */
+  height:560px;
+  max-height:560px;
+
+  scroll-behavior:auto;
+
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+.stage::-webkit-scrollbar{ width:0; height:0; }
+
+/* SVG */
+.staff{stroke:#111827;stroke-width:3;stroke-linecap:round}
+.bar{stroke:#111827;stroke-width:3}
+.noteHead{fill:#111827}
+.stem{stroke:#111827;stroke-width:3;stroke-linecap:round}
+.label{
+  font:34px system-ui;
+  font-weight:1000;
+  text-anchor:middle;
+}
+.playhead{stroke:var(--accent);stroke-width:5;stroke-linecap:round}
+.restGlyph{
+  fill:#111827;
+  text-anchor:middle;
+  dominant-baseline:middle;
+  font-family:
+    "Bravura","Noto Music","Noto Music Symbols",
+    "Segoe UI Symbol","Symbola","Arial Unicode MS",sans-serif;
+  font-size:52px;
+}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="card">
+
+    <div class="controls">
+      <button id="playBtn" class="primary">
+        <span class="iconBox"><span class="playIcon">▶</span></span>Play
+      </button>
+
+      <button id="stopBtn">
+        <span class="iconBox"><span class="stopSquare"></span></span>Stop
+      </button>
+
+      <button id="clearBtn" class="danger">Clear</button>
+
+      <span class="small">Tempo</span>
+      <input id="tempo" type="range" min="60" max="160" value="96">
+      <span id="tempoVal" class="small">96</span>
+
+      <select id="bars">
+        <option value="4">4</option>
+        <option value="8" selected>8</option>
+        <option value="16">16</option>
+      </select>
+      <span class="small">maten</span>
+
+      <input id="songName" type="text" placeholder="Naam" autocomplete="off" />
+      <button id="saveBtn">Save</button>
+      <button id="exportBtn">Export</button>
+
+      <button id="importBtn">Load</button>
+      <input id="importFile" type="file" accept=".json,application/json" hidden>
+
+      <span class="rowBreak"></span>
+      <span class="small">Playlist</span>
+      <select id="playlist"></select>
+      <button id="deleteBtn" class="danger">Delete</button>
+      <span id="status" class="small"></span>
+    </div>
+
+    <div class="stage" id="stage">
+      <svg id="svg" width="1400" height="520" aria-label="Notenbalk"></svg>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* CONFIG */
+const NOTE_TO_MIDI = { C:60, D:62, E:64, F:65, G:67, A:69, B:71 };
+const BW = { C:"#e11d48", D:"#f97316", E:"#facc15", F:"#8ed265", G:"#008a8c", A:"#7c3aed", B:"#ec4899" };
+const STORAGE_KEY="notenPlayer_playlist_v1";
+
+const BEATS_PER_BAR = 4;
+const BARS_PER_ROW  = 4;
+
+const STAFF_LEFT = 50;
+const STAFF_TOP_BASE = 74;
+const SYSTEM_GAP_Y = 210;
+const LINE_GAP = 24;
+const STAFF_LINES = 5;
+
+const NOTE_GAP = 88;
+const NOTE_R   = 10;
+const STEM_H   = 58;
+const STEM_X_NUDGE = 0.6;
+
+const LABEL_Y_OFFSET = 78;
+
+const LEFT_PAD_X = 44;
+const RIGHT_PAD_X = 60;
+
+const SCROLL_MARGIN = 24;          // bovenmarge
+const SCROLL_MS = 2600;            // iets rustiger
+
+/* DOM */
+let SONG=[];
+let bars=8;
+
+const stageEl=document.getElementById("stage");
+const svg=document.getElementById("svg");
+const tempoEl=document.getElementById("tempo");
+const tempoVal=document.getElementById("tempoVal");
+const barsEl=document.getElementById("bars");
+
+const playBtn=document.getElementById("playBtn");
+const stopBtn=document.getElementById("stopBtn");
+const clearBtn=document.getElementById("clearBtn");
+
+const songNameEl=document.getElementById("songName");
+const saveBtn=document.getElementById("saveBtn");
+const exportBtn=document.getElementById("exportBtn");
+const importBtn=document.getElementById("importBtn");
+const importFile=document.getElementById("importFile");
+
+const playlistEl=document.getElementById("playlist");
+const deleteBtn=document.getElementById("deleteBtn");
+const statusEl=document.getElementById("status");
+
+function maxItems(){ return bars*BEATS_PER_BAR; }
+function setStatus(msg){
+  statusEl.textContent = msg || "";
+  if(msg) setTimeout(()=>{ if(statusEl.textContent===msg) statusEl.textContent=""; }, 2200);
+}
+
+/* ✅ scroll mode: geen scroll bij 8, wél bij 16 (iets hoger zodat labels niet afkappen) */
+function applyStageScrollMode(){
+  const needsScroll = (bars > 8); // alleen bij 16
+  stageEl.style.overflow = needsScroll ? "auto" : "hidden";
+  stageEl.style.height   = needsScroll ? "680px" : "560px";
+  stageEl.style.maxHeight= needsScroll ? "680px" : "560px";
+  if(!needsScroll) stageEl.scrollTop = 0;
+}
+
+/* AUDIO */
+let ctx=null, master=null;
+let activeNodes=new Set();
+const MASTER_LEVEL=0.38;
+const DRUM_LEVEL=1.45;
+
+function ensureAudio(){
+  if(!ctx){
+    ctx=new (window.AudioContext||window.webkitAudioContext)();
+    master=ctx.createGain();
+    master.gain.value=MASTER_LEVEL;
+    master.connect(ctx.destination);
+  }
+  if(ctx.state==="suspended") ctx.resume();
+}
+function freq(m){return 440*Math.pow(2,(m-69)/12)}
+function playTone(m,t,d){
+  const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type="triangle";
+  o.frequency.setValueAtTime(freq(m),t);
+
+  g.gain.setValueAtTime(.0001,t);
+  g.gain.exponentialRampToValueAtTime(.9,t+.01);
+  g.gain.exponentialRampToValueAtTime(.0001,t+d-.02);
+
+  o.connect(g); g.connect(master);
+  activeNodes.add(o); activeNodes.add(g);
+  o.onended=()=>{ activeNodes.delete(o); activeNodes.delete(g); };
+
+  o.start(t); o.stop(t+d);
+}
+function blip(m){ ensureAudio(); playTone(m,ctx.currentTime+.01,.18); }
+
+function clickAt(t,high){
+  const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type="square";
+  o.frequency.setValueAtTime(high?2200:1400,t);
+  g.gain.setValueAtTime(.0001,t);
+  g.gain.exponentialRampToValueAtTime(.24*DRUM_LEVEL,t+.002);
+  g.gain.exponentialRampToValueAtTime(.0001,t+.045);
+  o.connect(g); g.connect(master);
+  activeNodes.add(o); activeNodes.add(g);
+  o.onended=()=>{ activeNodes.delete(o); activeNodes.delete(g); };
+  o.start(t); o.stop(t+.05);
+}
+function uiClick(){
+  ensureAudio();
+  clickAt(ctx.currentTime + 0.005, false);
+}
+
+function drumKick(t){
+  const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type="sine";
+  o.frequency.setValueAtTime(120,t);
+  o.frequency.exponentialRampToValueAtTime(55,t+.08);
+  g.gain.setValueAtTime(.0001,t);
+  g.gain.exponentialRampToValueAtTime(.60*DRUM_LEVEL,t+.004);
+  g.gain.exponentialRampToValueAtTime(.0001,t+.12);
+  o.connect(g); g.connect(master);
+  activeNodes.add(o); activeNodes.add(g);
+  o.onended=()=>{ activeNodes.delete(o); activeNodes.delete(g); };
+  o.start(t); o.stop(t+.13);
+}
+function drumSnare(t){
+  const noise=ctx.createBufferSource();
+  const buf=ctx.createBuffer(1, Math.floor(ctx.sampleRate*0.12), ctx.sampleRate);
+  const data=buf.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1);
+  noise.buffer=buf;
+
+  const hp=ctx.createBiquadFilter();
+  hp.type="highpass"; hp.frequency.setValueAtTime(1200,t);
+
+  const g=ctx.createGain();
+  g.gain.setValueAtTime(.0001,t);
+  g.gain.exponentialRampToValueAtTime(.32*DRUM_LEVEL,t+.003);
+  g.gain.exponentialRampToValueAtTime(.0001,t+.10);
+
+  noise.connect(hp); hp.connect(g); g.connect(master);
+  activeNodes.add(noise); activeNodes.add(hp); activeNodes.add(g);
+  noise.onended=()=>{ activeNodes.delete(noise); activeNodes.delete(hp); activeNodes.delete(g); };
+  noise.start(t); noise.stop(t+.11);
+}
+function drumHat(t){
+  const noise=ctx.createBufferSource();
+  const buf=ctx.createBuffer(1, Math.floor(ctx.sampleRate*0.03), ctx.sampleRate);
+  const data=buf.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1);
+  noise.buffer=buf;
+
+  const bp=ctx.createBiquadFilter();
+  bp.type="bandpass"; bp.frequency.setValueAtTime(9000,t); bp.Q.setValueAtTime(6,t);
+
+  const g=ctx.createGain();
+  g.gain.setValueAtTime(.0001,t);
+  g.gain.exponentialRampToValueAtTime(.14*DRUM_LEVEL,t+.0015);
+  g.gain.exponentialRampToValueAtTime(.0001,t+.028);
+
+  noise.connect(bp); bp.connect(g); g.connect(master);
+  activeNodes.add(noise); activeNodes.add(bp); activeNodes.add(g);
+  noise.onended=()=>{ activeNodes.delete(noise); activeNodes.delete(bp); activeNodes.delete(g); };
+  noise.start(t); noise.stop(t+.03);
+}
+function scheduleDrums(startTime, beatDur, totalBeats){
+  const totalHatSteps=totalBeats*2;
+  for(let s=0;s<totalHatSteps;s++){
+    const t=startTime + (s*(beatDur/2));
+    drumHat(t);
+  }
+  for(let b=0;b<totalBeats;b++){
+    const t=startTime + b*beatDur;
+    const pos=b%4;
+    if(pos===0 || pos===2) drumKick(t);
+    if(pos===1 || pos===3) drumSnare(t);
+  }
+}
+
+/* pitch → y */
+function pcToLetter(pc){return [0,0,1,1,2,3,3,4,4,5,5,6][pc]}
+function yPos(m, sysTop){
+  const bottom=sysTop+(STAFF_LINES-1)*LINE_GAP;
+  const oct=Math.floor(m/12)-1;
+  const abs=oct*7+pcToLetter(m%12);
+  const ref=4*7+2;
+  return bottom-(abs-ref)*(LINE_GAP/2);
+}
+
+/* SVG helpers */
+function clearSvg(){ while(svg.firstChild) svg.removeChild(svg.firstChild); }
+function L(x1,y1,x2,y2,cls){
+  const l=document.createElementNS("http://www.w3.org/2000/svg","line");
+  l.setAttribute("x1",x1); l.setAttribute("y1",y1);
+  l.setAttribute("x2",x2); l.setAttribute("y2",y2);
+  if(cls) l.setAttribute("class",cls);
+  return l;
+}
+function E(cx,cy,rx,ry,cls){
+  const e=document.createElementNS("http://www.w3.org/2000/svg","ellipse");
+  e.setAttribute("cx",cx); e.setAttribute("cy",cy);
+  e.setAttribute("rx",rx); e.setAttribute("ry",ry);
+  if(cls) e.setAttribute("class",cls);
+  return e;
+}
+function T(x,y,txt,cls,fill){
+  const t=document.createElementNS("http://www.w3.org/2000/svg","text");
+  t.setAttribute("x",x); t.setAttribute("y",y);
+  if(cls) t.setAttribute("class",cls);
+  if(fill) t.setAttribute("fill",fill);
+  t.textContent=txt;
+  return t;
+}
+
+/* RENDER + SCROLL */
+let notePos=[];
+let playhead=null;
+
+let autoScrollStage=0;      // 0=nog niet, 1=maat5 gedaan, 2=maat9 gedaan
+let scrollAnimId=0;
+
+let lastEditIndex=-1;
+
+function drawSystem(sysTop, width){
+  const sysLeft = STAFF_LEFT;
+  for(let i=0;i<STAFF_LINES;i++){
+    svg.appendChild(L(sysLeft, sysTop+i*LINE_GAP, sysLeft+width, sysTop+i*LINE_GAP, "staff"));
+  }
+}
+
+function smoothScrollTo(el, to, ms=SCROLL_MS){
+  cancelAnimationFrame(scrollAnimId);
+  const from = el.scrollTop;
+  const change = to - from;
+  if(Math.abs(change) < 1) return;
+
+  const start = performance.now();
+  const ease = (t)=>t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+
+  function step(now){
+    const p = Math.min(1, (now-start)/ms);
+    el.scrollTop = from + change * ease(p);
+    if(p < 1) scrollAnimId = requestAnimationFrame(step);
+  }
+  scrollAnimId = requestAnimationFrame(step);
+}
+
+/* ✅ invoer-follow: anker op vorige systeem zodat vorige notenbalk zichtbaar blijft */
+function jumpToSystemForIndex(i){
+  const beatsPerRow = BARS_PER_ROW * BEATS_PER_BAR;
+  const row = Math.floor(i / beatsPerRow);
+  const anchorRow = Math.max(0, row - 1);
+  const targetTop = STAFF_TOP_BASE + anchorRow * SYSTEM_GAP_Y;
+  stageEl.scrollTop = Math.max(0, targetTop - SCROLL_MARGIN);
+}
+
+function render(){
+  clearSvg();
+  notePos=[];
+
+  const rows = Math.ceil(bars / BARS_PER_ROW);
+  const beatsPerRow = BARS_PER_ROW * BEATS_PER_BAR;
+  const rowWidth = LEFT_PAD_X + beatsPerRow*NOTE_GAP + RIGHT_PAD_X;
+
+  playhead = L(0,0,0,0,"playhead");
+  playhead.setAttribute("visibility","hidden");
+  svg.appendChild(playhead);
+
+  for(let r=0;r<rows;r++){
+    const sysTop = STAFF_TOP_BASE + r*SYSTEM_GAP_Y;
+    drawSystem(sysTop, rowWidth-STAFF_LEFT);
+  }
+
+  for(let i=0;i<maxItems();i++){
+    const it = SONG[i] || {type:"rest"};
+    const row = Math.floor(i / beatsPerRow);
+    const withinRow = i % beatsPerRow;
+
+    const sysTop = STAFF_TOP_BASE + row*SYSTEM_GAP_Y;
+    const bottom = sysTop + (STAFF_LINES-1)*LINE_GAP;
+    const x = STAFF_LEFT + LEFT_PAD_X + withinRow*NOTE_GAP;
+
+    if(withinRow>0 && withinRow%4===0){
+      svg.appendChild(L(x-18, sysTop, x-18, bottom, "bar"));
+    }
+
+    if(it.type==="note"){
+      const y = yPos(it.pitch, sysTop);
+      svg.appendChild(E(x, y, NOTE_R+2, NOTE_R, "noteHead"));
+      if(it.pitch===60) svg.appendChild(L(x-22, y, x+22, y, "staff"));
+      const sx = x + NOTE_R - STEM_X_NUDGE;
+      svg.appendChild(L(sx, y, sx, y-STEM_H, "stem"));
+
+      const n = Object.keys(NOTE_TO_MIDI).find(k => (NOTE_TO_MIDI[k]%12)===(it.pitch%12));
+      svg.appendChild(T(x, bottom + LABEL_Y_OFFSET, n, "label", BW[n]||"#111827"));
+    }else{
+      svg.appendChild(T(x, sysTop + LINE_GAP*2, "𝄽", "restGlyph"));
+    }
+
+    notePos[i] = {x, sysTop, bottom};
+  }
+
+  svg.setAttribute("width", Math.max(1200, rowWidth + STAFF_LEFT));
+  svg.setAttribute("height", STAFF_TOP_BASE + rows*SYSTEM_GAP_Y + 220);
+
+  // ✅ tijdens invoer: alleen volgen als 16 maten (bij 8 geen scroll nodig)
+  if(!isPlaying && bars === 16 && lastEditIndex >= 0){
+    const i = Math.min(lastEditIndex, notePos.length-1);
+    jumpToSystemForIndex(i);
+    setPlayhead(i);
+  }else{
+    setPlayhead(0);
+  }
+}
+
+/* PLAYHEAD + playback scroll */
+function setPlayhead(i){
+  if(!playhead || i<0 || i>=notePos.length){
+    if(playhead) playhead.setAttribute("visibility","hidden");
+    return;
+  }
+  const p = notePos[i];
+  playhead.setAttribute("x1", p.x);
+  playhead.setAttribute("x2", p.x);
+  playhead.setAttribute("y1", p.sysTop - 18);
+  playhead.setAttribute("y2", p.bottom + 18);
+  playhead.setAttribute("visibility","visible");
+
+  // ✅ playback scroll alleen bij 16
+  if(bars !== 16) return;
+
+  const bar = Math.floor(i / BEATS_PER_BAR) + 1;
+
+  // maat 5: naar boven (systeem 1 als anker)
+  if(autoScrollStage < 1 && bar === 5){
+    autoScrollStage = 1;
+    const targetTop = STAFF_TOP_BASE + 0*SYSTEM_GAP_Y;
+    smoothScrollTo(stageEl, Math.max(0, targetTop - SCROLL_MARGIN), SCROLL_MS);
+  }
+
+  // maat 9: anker op systeem 2 (maat 5-8) zodat 9-16 + labels past (door hogere stage)
+  if(autoScrollStage < 2 && bar === 9){
+    autoScrollStage = 2;
+    const targetTop = STAFF_TOP_BASE + 1*SYSTEM_GAP_Y; // systeem 2 bovenaan
+    smoothScrollTo(stageEl, Math.max(0, targetTop - SCROLL_MARGIN), SCROLL_MS);
+  }
+}
+
+/* PLAYBACK */
+let isPlaying=false, timers=[];
+
+function hardStopAudio(){
+  if(ctx && master){
+    const now=ctx.currentTime;
+    master.gain.setTargetAtTime(.0001,now,.01);
+    activeNodes.forEach(n=>{
+      try{ if(typeof n.stop==="function") n.stop(now); }catch{}
+    });
+    activeNodes.clear();
+    setTimeout(()=>{ if(master) master.gain.value=MASTER_LEVEL; },40);
+  }
+}
+function stop(){
+  isPlaying=false;
+  timers.forEach(clearTimeout); timers=[];
+  hardStopAudio();
+
+  autoScrollStage=0;
+  cancelAnimationFrame(scrollAnimId);
+
+  stageEl.scrollTop=0;
+  setPlayhead(-1);
+}
+
+function scheduleLoop(startTime){
+  if(!isPlaying) return;
+
+  const beat = 60/tempoEl.value;
+  let t = startTime;
+
+  scheduleDrums(t, beat, maxItems());
+
+  for(let i=0;i<maxItems();i++){
+    const it = SONG[i] || {type:"rest"};
+    if(it.type==="note") playTone(it.pitch, t, beat);
+
+    const ms = Math.max(0, (t-ctx.currentTime)*1000);
+    timers.push(setTimeout(()=>{
+      if(!isPlaying) return;
+      setPlayhead(i);
+    }, ms));
+
+    t += beat;
+  }
+
+  // loop: terug naar begin + reset scroll state
+  const msLoop = Math.max(0, (t-ctx.currentTime)*1000) + 10;
+  timers.push(setTimeout(()=>{
+    if(!isPlaying) return;
+
+    cancelAnimationFrame(scrollAnimId);
+    stageEl.scrollTop = 0;
+    autoScrollStage = 0;
+    setPlayhead(0);
+
+    scheduleLoop(t);
+  }, msLoop));
+}
+
+function play(){
+  ensureAudio();
+  stop();
+  isPlaying=true;
+
+  autoScrollStage=0;
+  stageEl.scrollTop = 0;
+  setPlayhead(0);
+
+  const beat = 60/tempoEl.value;
+  let t = ctx.currentTime + .12;
+
+  scheduleDrums(t, beat, 4);
+  for(let i=0;i<4;i++) clickAt(t+i*beat, i===0);
+  t += 4*beat;
+
+  scheduleLoop(t);
+}
+
+/* INPUT */
+function addNote(n,hi){
+  if(SONG.length>=maxItems()) return;
+  const p=NOTE_TO_MIDI[n]+(hi?12:0);
+  SONG.push({type:"note",pitch:p});
+  lastEditIndex = SONG.length - 1;
+  render();
+  blip(p);
+}
+function addRest(){
+  if(SONG.length>=maxItems()) return;
+  SONG.push({type:"rest"});
+  lastEditIndex = SONG.length - 1;
+  render();
+  uiClick();
+}
+function delLast(){
+  if(!SONG.length) return;
+  SONG.pop();
+  lastEditIndex = SONG.length - 1;
+  render();
+  uiClick();
+}
+
+function isTypingTarget(el){
+  return el && (el.tagName==="INPUT" || el.tagName==="TEXTAREA" || el.isContentEditable);
+}
+function setPlayVisual(down){ playBtn.classList.toggle("kbdDown", down); }
+function setStopVisual(down){ stopBtn.classList.toggle("kbdDown", down); }
+
+let spaceHeld=false;
+window.addEventListener("keydown",(e)=>{
+  if(isTypingTarget(document.activeElement)){
+    if(e.code==="Escape"){ e.preventDefault(); stop(); }
+    return;
+  }
+
+  if(e.code==="Space"){
+    e.preventDefault();
+    if(!spaceHeld){
+      spaceHeld=true;
+      if(isPlaying){
+        setStopVisual(true); stop(); setTimeout(()=>setStopVisual(false),140);
+      }else{
+        setPlayVisual(true); play(); setTimeout(()=>setPlayVisual(false),140);
+      }
+    }
+    return;
+  }
+
+  if(e.key==="Backspace"){ e.preventDefault(); delLast(); return; }
+  if(e.key==="/"){ e.preventDefault(); addRest(); return; }
+
+  const k=(e.key||"").toUpperCase();
+  if(NOTE_TO_MIDI[k]){
+    e.preventDefault();
+    addNote(k, e.shiftKey);
+  }
+},{passive:false});
+
+window.addEventListener("keyup",(e)=>{
+  if(e.code==="Space"){
+    spaceHeld=false;
+    setPlayVisual(false);
+    setStopVisual(false);
+  }
+});
+
+/* PLAYLIST */
+function readPlaylist(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    const arr=raw?JSON.parse(raw):[];
+    return Array.isArray(arr)?arr:[];
+  }catch{ return []; }
+}
+function writePlaylist(arr){ localStorage.setItem(STORAGE_KEY, JSON.stringify(arr)); }
+function refreshPlaylistUI(selectName=null){
+  const list=readPlaylist().sort((a,b)=>a.name.localeCompare(b.name));
+  playlistEl.innerHTML="";
+  if(!list.length){
+    const opt=document.createElement("option");
+    opt.value=""; opt.textContent="(leeg)";
+    playlistEl.appendChild(opt);
+    return;
+  }
+  list.forEach(item=>{
+    const opt=document.createElement("option");
+    opt.value=item.name;
+    opt.textContent=item.name;
+    playlistEl.appendChild(opt);
+  });
+  if(selectName){
+    const found=[...playlistEl.options].some(o=>o.value===selectName);
+    if(found) playlistEl.value=selectName;
+  }
+}
+function saveCurrent(){
+  const name=(songNameEl.value||"").trim();
+  if(!name){ setStatus("Geef een naam."); songNameEl.focus(); return; }
+  const entry={ name, bars, song: SONG.slice(0, maxItems()) };
+  const list=readPlaylist();
+  const idx=list.findIndex(x=>x.name===name);
+  if(idx>=0) list[idx]=entry; else list.push(entry);
+  writePlaylist(list);
+  refreshPlaylistUI(name);
+  setStatus("Saved ✅");
+}
+function loadByName(name){
+  const list=readPlaylist();
+  const item=list.find(x=>x.name===name);
+  if(!item) return;
+
+  stop();
+  bars=item.bars||8;
+  barsEl.value=String(bars);
+  applyStageScrollMode();
+
+  SONG=Array.isArray(item.song) ? item.song.slice(0, bars*BEATS_PER_BAR) : [];
+  songNameEl.value=item.name||"";
+
+  lastEditIndex = SONG.length - 1;
+  render();
+  setStatus("Loaded ✅");
+}
+function deleteSelected(){
+  const name=playlistEl.value;
+  if(!name) return;
+  const list=readPlaylist().filter(x=>x.name!==name);
+  writePlaylist(list);
+  refreshPlaylistUI();
+  setStatus("Deleted 🗑️");
+  uiClick();
+}
+
+/* EXPORT / LOAD FILE */
+function safeFileName(s){
+  return (s||"song").trim().replace(/[\\\/:*?"<>|]+/g,"-").slice(0,80) || "song";
+}
+function exportCurrent(){
+  const name=(songNameEl.value||"").trim() || "song";
+  const payload={app:"noten-player",version:1,name,bars,tempo:+tempoEl.value,song:SONG.slice(0, maxItems())};
+  const blob=new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=`${safeFileName(name)}.json`;
+  document.body.appendChild(a);
+  a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 400);
+  setStatus("Exported ⬇️");
+}
+function importFromObject(obj){
+  if(!obj || typeof obj!=="object") throw new Error("Ongeldig bestand.");
+  if(!Array.isArray(obj.song)) throw new Error("Geen song gevonden.");
+  const newBars=(obj.bars===4||obj.bars===8||obj.bars===16)?obj.bars:8;
+
+  stop();
+  bars=newBars;
+  barsEl.value=String(bars);
+  applyStageScrollMode();
+
+  SONG=obj.song.slice(0,bars*BEATS_PER_BAR).map(it=>{
+    if(it && it.type==="rest") return {type:"rest"};
+    if(it && it.type==="note" && Number.isFinite(it.pitch)) return {type:"note",pitch:+it.pitch};
+    return null;
+  }).filter(Boolean);
+
+  if(typeof obj.name==="string") songNameEl.value=obj.name.trim();
+  if(Number.isFinite(obj.tempo)){
+    const t=Math.max(+tempoEl.min, Math.min(+tempoEl.max, +obj.tempo));
+    tempoEl.value=String(t); tempoVal.textContent=String(t);
+  }
+
+  lastEditIndex = SONG.length - 1;
+  render();
+  setStatus("Loaded ✅");
+}
+function handleImportFile(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{ importFromObject(JSON.parse(String(reader.result||""))); }
+    catch{ setStatus("Load mislukt."); }
+    importFile.value="";
+  };
+  reader.readAsText(file);
+}
+
+/* UI wiring */
+tempoVal.textContent=tempoEl.value;
+tempoEl.oninput=()=>tempoVal.textContent=tempoEl.value;
+
+barsEl.value=String(bars);
+barsEl.onchange=()=>{
+  bars=+barsEl.value;
+  applyStageScrollMode();
+  if(SONG.length>maxItems()) SONG=SONG.slice(0,maxItems());
+  lastEditIndex = Math.min(lastEditIndex, SONG.length-1);
+  render();
+};
+
+playBtn.onclick=()=>{ setPlayVisual(true); play(); setTimeout(()=>setPlayVisual(false),140); };
+stopBtn.onclick=()=>{ setStopVisual(true); stop(); setTimeout(()=>setStopVisual(false),140); };
+clearBtn.onclick=()=>{ stop(); SONG=[]; lastEditIndex=-1; render(); setStatus("Cleared"); uiClick(); };
+
+saveBtn.onclick=saveCurrent;
+exportBtn.onclick=exportCurrent;
+
+importBtn.onclick=()=>importFile.click();
+importFile.onchange=()=>handleImportFile(importFile.files && importFile.files[0]);
+
+deleteBtn.onclick=deleteSelected;
+
+songNameEl.addEventListener("keydown",(e)=>{
+  if(e.key==="Enter"){ e.preventDefault(); saveCurrent(); }
+});
+playlistEl.onchange=()=>{
+  const name=playlistEl.value;
+  if(name) loadByName(name);
+};
+
+refreshPlaylistUI();
+applyStageScrollMode();
+render();
+</script>
+</body>
+</html>
